@@ -10,14 +10,13 @@ import os
 from dotenv import load_dotenv
 from ratelimit import limits, RateLimitException
 import logging
-import sys
 from logging.handlers import TimedRotatingFileHandler
-from config import Config
+import re
 import json
 import pandas as pd
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
-import re
+from config import Config
 
 # Load environment variables
 load_dotenv()
@@ -43,14 +42,46 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure logging
-log_file = os.path.abspath(getattr(Config, "LOG_FILE_PATH", "logs/app.log"))
-log_level = logging.INFO  # Set default log level
+class SizeAndTimeRotatingFileHandler(TimedRotatingFileHandler):
+    def __init__(self, filename, when='midnight', interval=1, backupCount=0, encoding=None, delay=False, utc=False, atTime=None, maxBytes=20*1024*1024):
+        super().__init__(filename, when, interval, backupCount, encoding, delay, utc, atTime)
+        self.maxBytes = maxBytes
+
+    def shouldRollover(self, record):
+        # Time-based rollover
+        if super().shouldRollover(record):
+            return 1
+        # Size-based rollover
+        if self.stream is None:  # Delay was set...
+            self.stream = self._open()
+        if self.maxBytes > 0:
+            self.stream.seek(0, 2)  # Go to end of file
+            if self.stream.tell() + len(self.format(record).encode(self.encoding or "utf-8")) >= self.maxBytes:
+                return 1
+        return 0
+
+# Set up log directory and file
+log_dir = os.path.dirname(os.path.abspath(getattr(Config, "LOG_FILE_PATH", "logs/audit.log")))
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.abspath(getattr(Config, "LOG_FILE_PATH", "logs/audit.log"))
+
+# Remove any previous handlers
+for handler in logging.root.handlers[:]:
+    logging.root.removeHandler(handler)
+
+handler = SizeAndTimeRotatingFileHandler(
+    log_file,
+    when='midnight',
+    backupCount=30,  # Keep up to 30 log files
+    encoding='utf-8',
+    maxBytes=20*1024*1024  # 20MB
+)
+formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+handler.setFormatter(formatter)
+
 logging.basicConfig(
-    filename=log_file,
-    level=log_level,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    encoding="utf-8",
+    level=logging.INFO,
+    handlers=[handler],
     force=True
 )
 log = logging.getLogger("converter_x")
