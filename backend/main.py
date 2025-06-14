@@ -105,6 +105,7 @@ async def convert_excel_to_xml(
     header_fields: str = Form(None)
 ):
     try:
+        log.info(f"File upload attempt: {file.filename}")
         header_fields_dict = json.loads(header_fields) if header_fields else {}
 
         # If header_fields_dict is a list, convert to dict
@@ -119,20 +120,22 @@ async def convert_excel_to_xml(
         temp_path = os.path.join(Config.UPLOAD_DIR, file.filename)
         with open(temp_path, "wb") as f:
             f.write(await file.read())
+        log.info(f"File upload successful: {file.filename} saved to {temp_path}")
 
         # Read Excel file
+        log.info(f"Starting conversion for file: {file.filename}")
         df = pd.read_excel(temp_path)
 
         # Create XML root
-        root = ET.Element("CALLREPORT")  # Changed from "ROOT" to "CALLREPORT"
+        root = ET.Element("CALLREPORT")
         # Add header fields
         header = ET.SubElement(root, "HEADER")
         for k, v in header_fields_dict.items():
             ET.SubElement(header, k).text = str(v)
         # Add data rows
-        body_section = ET.SubElement(root, "BODY")  # Changed from "DATA" to "BODY"
+        body_section = ET.SubElement(root, "BODY")
         for _, row in df.iterrows():
-            record = ET.SubElement(body_section, "CALLREPORT_DATA")  # Changed from "RECORD" to "CALLREPORT_DATA"
+            record = ET.SubElement(body_section, "CALLREPORT_DATA")
             for col in df.columns:
                 tag = sanitize_tag(col)
                 ET.SubElement(record, tag).text = str(row[col])
@@ -150,10 +153,11 @@ async def convert_excel_to_xml(
         # Save XML content to file
         with open(output_path, "wb") as f:
             f.write(xml_content)
+        log.info(f"File conversion successful: {file.filename} -> {saved_filename}")
 
         backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
         download_url = f"{backend_url}/download/{saved_filename}"
-        log.info(f"Successfully converted file: {file.filename} -> {saved_filename}")
+        log.info(f"Download URL generated: {download_url}")
         return {
             "status": "success",
             "message": "Conversion completed",
@@ -161,17 +165,18 @@ async def convert_excel_to_xml(
         }
     except Exception as e:
         import traceback
-        log.error(f"Conversion failed: {str(e)}\n{traceback.format_exc()}")
-        log.error(f"Conversion failed: {str(e)}\n{traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail="An error occurred during conversion. Please try again later.")
+        log.error(f"Conversion failed for file: {file.filename} - {str(e)}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="An error occurred during the conversion process. Please try again later.")
 
 @app.get("/download/{filename}")
 async def download_file(filename: str):
-    output_dir = Config.OUTPUT_DIR  # Make sure this matches where you save converted files
+    output_dir = Config.OUTPUT_DIR
     file_path = os.path.join(output_dir, filename)
+    log.info(f"Download attempt for file: {filename}")
     if not os.path.exists(file_path):
         log.error(f"File not found for download: {filename}")
         raise HTTPException(status_code=404, detail="File not found")
+    log.info(f"File download successful: {filename}")
     return FileResponse(file_path, filename=filename)
 
 @app.get("/")
