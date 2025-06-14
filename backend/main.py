@@ -37,23 +37,24 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 5  # 5 minutes session timeout
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Update with your frontend URL
+    allow_origins=["http://localhost","http://localhost:3000"],  # Update with your frontend URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Configure logging
-log_file = getattr(Config, "LOG_FILE_PATH", "logs/app.log")
-log_level = getattr(logging, getattr(Config, "LOG_LEVEL", "INFO").upper(), logging.INFO)
-
+log_file = os.path.abspath(getattr(Config, "LOG_FILE_PATH", "logs/app.log"))
+log_level = logging.INFO  # Set default log level
 logging.basicConfig(
     filename=log_file,
     level=log_level,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     encoding="utf-8",
+    force=True
 )
 log = logging.getLogger("converter_x")
+log.info("Test log entry: Backend started")
 
 # Rate limiting decorator - 100 requests per minute
 @limits(calls=100, period=60)
@@ -131,7 +132,7 @@ async def convert_excel_to_xml(
         # Add data rows
         body_section = ET.SubElement(root, "BODY")  # Changed from "DATA" to "BODY"
         for _, row in df.iterrows():
-            record = ET.SubElement(body_section, "RECORD")
+            record = ET.SubElement(body_section, "CALLREPORT_DATA")  # Changed from "RECORD" to "CALLREPORT_DATA"
             for col in df.columns:
                 tag = sanitize_tag(col)
                 ET.SubElement(record, tag).text = str(row[col])
@@ -159,8 +160,10 @@ async def convert_excel_to_xml(
             "downloadUrl": download_url
         }
     except Exception as e:
-        log.error(f"Error converting file: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        log.error(f"Conversion failed: {str(e)}\n{traceback.format_exc()}")
+        log.error(f"Conversion failed: {str(e)}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="An error occurred during conversion. Please try again later.")
 
 @app.get("/download/{filename}")
 async def download_file(filename: str):
@@ -171,9 +174,13 @@ async def download_file(filename: str):
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(file_path, filename=filename)
 
+@app.get("/")
+def read_root():
+    return {"message": "Backend is running"}
+
 def sanitize_tag(tag):
     # Replace spaces and invalid characters with underscores
     return re.sub(r'[^a-zA-Z0-9_]', '_', tag)
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000)

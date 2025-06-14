@@ -1,7 +1,7 @@
+from pathlib import Path
 import os
 from typing import Dict, Any
 from dotenv import load_dotenv
-from pathlib import Path
 import logging
 
 # Load environment variables
@@ -11,7 +11,9 @@ class Config:
     # Base paths
     BASE_DIR = Path(__file__).resolve().parent
     UPLOAD_DIR = BASE_DIR / "uploads"
-    OUTPUT_DIR = BASE_DIR / "output"
+    OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", os.path.expanduser("~/converter_x_output")))
+    # This will default to a folder in the user's home directory if not set
+
     LOG_DIR = BASE_DIR / "logs"
 
     # Create necessary directories
@@ -48,7 +50,7 @@ class Config:
 
     # Logging
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-    LOG_FILE_PATH = os.getenv("LOG_FILE_PATH", "logs/app.log")
+    LOG_FILE_PATH = os.getenv("LOG_FILE_PATH", "logs/audit.log")
 
     # XML Settings
     XML_NAMESPACE = "http://www.example.com/xml/converter"
